@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -79,6 +80,10 @@ DJOSER = {
            'ACTIVATION_URL': 'http://localhost:3000/activate/{uid}/{token}',
            'SEND_ACTIVATION_EMAIL': False, # Set to True if you want email activation
            'SEND_CONFIRMATION_EMAIL': False, # Set to True if you want email confirmation
+           'EMAIL': {
+               'password_reset': 'djoser.email.PasswordResetEmail',
+               # 'password_changed_confirmation': 'djoser.email.PasswordChangedConfirmationEmail',
+           },
            'SERIALIZERS': {
                'user_create': 'djoser.serializers.UserCreateSerializer',
                'user': 'djoser.serializers.UserSerializer',
@@ -157,3 +162,19 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+
+# Email Configuration
+# https://docs.djangoproject.com/en/6.0/topics/email/
+
+EMAIL_USE = config('EMAIL_USE', default='console')  # 'console' or 'sendgrid'
+
+if EMAIL_USE == 'sendgrid':
+    # Production: SendGrid
+    EMAIL_BACKEND = 'sendgrid_backend.SendgridBackend'
+    SENDGRID_API_KEY = config('SENDGRID_API_KEY', default='')
+    DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@bookingsystem.com')
+else:
+    # Development: Console (prints to console)
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+    DEFAULT_FROM_EMAIL = 'noreply@bookingsystem.local'

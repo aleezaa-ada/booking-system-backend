@@ -9,6 +9,9 @@ djangorestframework = "*"
 psycopg2-binary = "*"
 django-cors-headers = "*"
 djoser = "*"
+sendgrid = "*"
+python-decouple = "*"
+django-sendgrid-v5 = "*"
 
 [dev-packages]
 
