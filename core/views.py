@@ -2,6 +2,7 @@ from django.shortcuts import render
 from rest_framework import viewsets, permissions
 from .models import Resource, Booking
 from .serializers import ResourceSerializer, BookingSerializer
+from .utils import send_booking_notification_email 
 
 class IsAdminOrReadOnly(permissions.BasePermission):
     """
@@ -33,12 +34,20 @@ class BookingViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         # Automatically set the user to the currently authenticated user
-        serializer.save(user=self.request.user)
+        booking = serializer.save(user=self.request.user)
+        send_booking_notification_email(booking, "Booking Confirmation", "booking_created_template")
 
-    # For advanced: Add perform_update to handle status changes if needed
     def perform_update(self, serializer):
-        # Example: Only admin can change status
+        # Only admin can change status
         if 'status' in serializer.validated_data and not self.request.user.is_staff:
             raise permissions.PermissionDenied("Only administrators can change booking status.")
-        serializer.save()
+
+        old_status = self.get_object().status
+        booking = serializer.save()
+        if old_status != booking.status: # Send email only if status changed
+            send_booking_notification_email(booking, f"Booking Status Updated to {booking.status.capitalize()}", "booking_updated_template")
+
+    def perform_destroy(self, instance):
+        send_booking_notification_email(instance, "Booking Cancellation", "booking_cancelled_template")
+        instance.delete()
 
