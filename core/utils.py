@@ -11,6 +11,12 @@ def send_booking_notification_email(booking, subject, template_name):
     # Customize message based on event type
     if template_name == "booking_cancelled_template":
         status_text = "been cancelled"
+    elif template_name == "booking_details_updated_template":
+        status_text = "been updated"
+    elif template_name == "booking_status_updated_template":
+        status_text = f"status has been updated to {booking.status}"
+    elif template_name == "booking_created_template":
+        status_text = f"been confirmed with status: {booking.status}"
     else:
         status_text = f"been {booking.status}"
 

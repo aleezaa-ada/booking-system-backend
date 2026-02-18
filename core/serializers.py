@@ -58,6 +58,57 @@ class BookingSerializer(serializers.ModelSerializer):
                 )
 
             if overlapping_bookings.exists():
-                raise serializers.ValidationError("This resource is already booked for the selected time slot.")
+                # Get information about the conflicting booking(s)
+                conflict_details = []
+                for booking in overlapping_bookings[:3]:  # Show up to 3 conflicts
+                    conflict_details.append(
+                        f"{booking.start_time.strftime('%Y-%m-%d %H:%M')} - {booking.end_time.strftime('%H:%M')}"
+                    )
+
+                # Find next available time slot after the requested time
+                all_bookings_today = Booking.objects.filter(
+                    resource=resource,
+                    start_time__date=start_time.date(),
+                    start_time__gte=timezone.now()
+                ).order_by('start_time')
+
+                suggestions = []
+                if all_bookings_today.exists():
+                    # Suggest time after the last conflicting booking
+                    last_conflict = overlapping_bookings.order_by('-end_time').first()
+                    if last_conflict:
+                        suggested_start = last_conflict.end_time
+                        # Check if there's enough time before the next booking
+                        next_booking = all_bookings_today.filter(start_time__gt=suggested_start).first()
+                        duration = end_time - start_time
+                        suggested_end = suggested_start + duration
+
+                        if not next_booking or suggested_end <= next_booking.start_time:
+                            suggestions.append(
+                                f"{suggested_start.strftime('%Y-%m-%d %H:%M')} - {suggested_end.strftime('%H:%M')}"
+                            )
+
+                error_msg = f"Cannot create booking - this resource is already booked during your selected time. "
+                error_msg += f"Conflicting booking(s): {', '.join(conflict_details)}. "
+
+                if suggestions:
+                    error_msg += f"Suggested available time: {suggestions[0]}."
+                else:
+                    error_msg += "Please check the resource availability and try a different time."
+
+                raise serializers.ValidationError(error_msg)
 
         return data
+
+
+# Custom User Serializer for Djoser to include is_staff field
+class CustomUserSerializer(serializers.ModelSerializer):
+    """
+    Custom user serializer that includes is_staff field
+    so frontend can check if user is admin
+    """
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email', 'is_staff', 'is_active')
+        read_only_fields = ('id', 'is_staff', 'is_active')
+

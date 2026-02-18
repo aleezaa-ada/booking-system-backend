@@ -86,8 +86,8 @@ DJOSER = {
            },
            'SERIALIZERS': {
                'user_create': 'djoser.serializers.UserCreateSerializer',
-               'user': 'djoser.serializers.UserSerializer',
-               'current_user': 'djoser.serializers.UserSerializer',
+               'user': 'core.serializers.CustomUserSerializer',
+               'current_user': 'core.serializers.CustomUserSerializer',
                'user_delete': 'djoser.serializers.UserDeleteSerializer',
            },
        }
