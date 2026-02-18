@@ -57,7 +57,7 @@ REST_FRAMEWORK = {
        }
 
 CORS_ALLOWED_ORIGINS = [
-           "http://localhost:3000", # Your React frontend development server
+           "http://localhost:5173", # Your React frontend development server
            # Add your deployed frontend URL here later
        ]
        # Or for development, allow all (be careful in production!)
