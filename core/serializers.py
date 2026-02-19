@@ -6,9 +6,43 @@ from django.utils import timezone
 User = get_user_model()
 
 class ResourceSerializer(serializers.ModelSerializer):
+    availability_status = serializers.SerializerMethodField()
+
     class Meta:
         model = Resource
         fields = '__all__'
+
+    def get_availability_status(self, obj):
+        """
+        Determine real-time availability status based on bookings.
+        Returns: 'available', 'unavailable', or 'pending'
+        """
+        # If resource is manually disabled, it's unavailable
+        if not obj.is_available:
+            return 'unavailable'
+
+        # Check for current or future bookings
+        now = timezone.now()
+
+        # Check for confirmed bookings (now or in the future)
+        has_confirmed = obj.bookings.filter(
+            status='confirmed',
+            end_time__gt=now
+        ).exists()
+
+        if has_confirmed:
+            return 'unavailable'
+
+        # Check for pending bookings
+        has_pending = obj.bookings.filter(
+            status='pending',
+            end_time__gt=now
+        ).exists()
+
+        if has_pending:
+            return 'pending'
+
+        return 'available'
 
 class BookingSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(read_only=True, default=serializers.CurrentUserDefault())
