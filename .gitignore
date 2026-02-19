@@ -28,6 +28,7 @@ wheels/
 *.log
 local_settings.py
 db.sqlite3
+staticfiles/
 
 # Virtual environments
 .venv

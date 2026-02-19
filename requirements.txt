@@ -1,0 +1,12 @@
+-i https://pypi.org/simple
+Django>=5.0,<6.0
+djangorestframework
+psycopg2-binary
+django-cors-headers
+djoser
+sendgrid
+python-decouple
+django-sendgrid-v5
+gunicorn
+whitenoise
+dj-database-url

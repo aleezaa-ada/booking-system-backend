@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 from decouple import config
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,13 +22,25 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-oea8^9auwe2%za!%$z(nku#k6fy3zu&*meu=hc24195u=-&d=d'
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-oea8^9auwe2%za!%$z(nku#k6fy3zu&*meu=hc24195u=-&d=d')
+DEBUG = config("DEBUG", default=False, cast=bool)
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+if DEBUG:
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^https://.*\.github\.dev$",
+        r"^http://localhost(:\d+)?$",
+        r"^http://127\.0\.0\.1(:\d+)?$",
+    ]
+    CORS_ALLOW_ALL_ORIGINS = False
+else:
+    # Production - use FRONTEND_URL from environment
+    frontend_url = config("FRONTEND_URL", default="")
+    CORS_ALLOWED_ORIGINS = [frontend_url] if frontend_url else []
+    CORS_ALLOW_ALL_ORIGINS = False  # Never allow all in production
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,.onrender.com').split(',')
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False
 
 # Application definition
 
@@ -56,15 +69,17 @@ REST_FRAMEWORK = {
            ),
        }
 
-CORS_ALLOWED_ORIGINS = [
-           "http://localhost:5173", # Your React frontend development server
-           # Add your deployed frontend URL here later
-       ]
-       # Or for development, allow all (be careful in production!)
-       # CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:5173'
+).split(',')
+
+# For development, you can allow all origins (disable in production)
+CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Add whitenoise for static files
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -73,6 +88,34 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# CORS Configuration
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# Session configuration - use database-backed sessions for Render deployment
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_SECURE = not config('DEBUG', default=False, cast=bool)  # Use secure cookies in production
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
 
 DJOSER = {
            'PASSWORD_RESET_CONFIRM_URL': 'http://localhost:3000/password-reset/{uid}/{token}',
@@ -115,16 +158,25 @@ WSGI_APPLICATION = 'booking_system_api.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-           'default': {
-               'ENGINE': 'django.db.backends.postgresql',
-               'NAME': 'booking_system_db',
-               'USER': 'aleezaahmed',
-               'PASSWORD': 'V9!tPz#4qR&nK8sL0w@eF3y',
-               'HOST': 'localhost', # Or your DB host
-               'PORT': '5432',
-           }
-       }
+# Use DATABASE_URL environment variable if available (Render provides this)
+# Otherwise fall back to local PostgreSQL configuration
+DATABASE_URL = config('DATABASE_URL', default=None)
+
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.parse(DATABASE_URL)
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'booking_system_db',
+            'USER': 'aleezaahmed',
+            'PASSWORD': 'V9!tPz#4qR&nK8sL0w@eF3y',
+            'HOST': 'localhost',
+            'PORT': '5432',
+        }
+    }
 
 
 # Password validation
@@ -162,6 +214,14 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Whitenoise configuration for serving static files
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 
 # Email Configuration
@@ -178,3 +238,8 @@ else:
     # Development: Console (prints to console)
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
     DEFAULT_FROM_EMAIL = 'noreply@bookingsystem.local'
+
+# Default primary key field type
+# https://docs.djangoproject.com/en/6.0/ref/settings/#default-auto-field
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
