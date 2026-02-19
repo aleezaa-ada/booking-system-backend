@@ -18,24 +18,32 @@ class BookingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Booking
         fields = '__all__'
-        read_only_fields = ('created_at', 'updated_at') # Status can be updated by admins via perform_update
+        read_only_fields = ('created_at', 'updated_at')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Status field is now editable by all users
 
     def validate(self, data):
         # Only validate timing/resource if those fields are being updated
         # (For PATCH requests, only specific fields are sent)
         
         if 'start_time' in data and 'end_time' in data and 'resource' in data:
-            # Booking Cut-off Time (cannot book within 30 minutes of now)
-            min_booking_lead_time = timezone.now() + timezone.timedelta(minutes=30)
-            if data['start_time'] < min_booking_lead_time:
-                raise serializers.ValidationError(f"Bookings must be made at least 30 minutes in advance. Earliest available: {min_booking_lead_time.strftime('%Y-%m-%d %H:%M')}")
-            
+            # Only apply the 30-minute advance booking rule for NEW bookings
+            # When updating existing bookings, skip this validation
+            if not self.instance:
+                # Booking Cut-off Time (cannot book within 30 minutes of now)
+                min_booking_lead_time = timezone.now() + timezone.timedelta(minutes=30)
+                if data['start_time'] < min_booking_lead_time:
+                    raise serializers.ValidationError(f"Bookings must be made at least 30 minutes in advance. Earliest available: {min_booking_lead_time.strftime('%Y-%m-%d %H:%M')}")
+
             # Ensure end_time is after start_time
             if data['start_time'] >= data['end_time']:
                 raise serializers.ValidationError("End time must be after start time.")
 
-            # Ensure booking is not in the past
-            if data['start_time'] < timezone.now():
+            # Only check if booking is in the past for NEW bookings
+            # When updating, allow past times (user is just updating details like status)
+            if not self.instance and data['start_time'] < timezone.now():
                 raise serializers.ValidationError("Cannot book in the past.")
 
             # Check for overlapping bookings for the same resource

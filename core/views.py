@@ -1,5 +1,6 @@
 from django.shortcuts import render
 from rest_framework import viewsets, permissions
+from rest_framework.exceptions import PermissionDenied
 from .models import Resource, Booking
 from .serializers import ResourceSerializer, BookingSerializer
 from .utils import send_booking_notification_email 
@@ -36,13 +37,14 @@ class BookingViewSet(viewsets.ModelViewSet):
         """
         Check if user has permission to modify/delete this booking.
         Regular users can only modify/delete their own bookings.
+        Admins can modify/delete any booking.
         """
         super().check_object_permissions(request, obj)
 
-        # For delete operations, ensure user owns the booking or is admin
-        if request.method == 'DELETE':
+        # For update and delete operations, ensure user owns the booking or is admin
+        if request.method in ['PUT', 'PATCH', 'DELETE']:
             if not request.user.is_staff and obj.user != request.user:
-                raise permissions.PermissionDenied("You can only delete your own bookings.")
+                raise PermissionDenied("You can only modify your own bookings.")
 
     def perform_create(self, serializer):
         # Automatically set the user to the currently authenticated user
@@ -50,16 +52,16 @@ class BookingViewSet(viewsets.ModelViewSet):
         send_booking_notification_email(booking, "Booking Confirmation", "booking_created_template")
 
     def perform_update(self, serializer):
-        # Only admin can change status
-        if 'status' in serializer.validated_data and not self.request.user.is_staff:
-            raise permissions.PermissionDenied("Only administrators can change booking status.")
-
+        """
+        Handle booking updates.
+        - Users can update their own bookings including status
+        """
         old_status = self.get_object().status
         booking = serializer.save()
 
         # Send different emails based on what changed
         if old_status != booking.status:
-            # Admin changed the status
+            # Status changed
             send_booking_notification_email(booking, f"Booking Status Updated to {booking.status.capitalize()}", "booking_status_updated_template")
         else:
             # User updated booking details (time, notes, etc.)
