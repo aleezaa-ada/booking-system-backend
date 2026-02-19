@@ -112,3 +112,50 @@ class CustomUserSerializer(serializers.ModelSerializer):
         fields = ('id', 'username', 'email', 'is_staff', 'is_active')
         read_only_fields = ('id', 'is_staff', 'is_active')
 
+
+class CustomUserCreateSerializer(serializers.ModelSerializer):
+    """
+    Custom user creation serializer that enforces email uniqueness
+    """
+    password = serializers.CharField(write_only=True, style={'input_type': 'password'})
+
+    class Meta:
+        model = User
+        fields = ('username', 'email', 'password')
+
+    def validate_email(self, value):
+        """
+        Check that the email is unique
+        """
+        if not value:
+            raise serializers.ValidationError("Email is required.")
+
+        # Normalize email to lowercase for consistency
+        value = value.lower().strip()
+
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("This email is already in use. Please use another email or login to your existing account.")
+
+        return value
+
+    def validate_username(self, value):
+        """
+        Check that the username is unique (Django does this by default, but we add a clearer error message)
+        """
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError("A user with this username already exists.")
+
+        return value
+
+    def create(self, validated_data):
+        """
+        Create a new user with encrypted password
+        """
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'].lower().strip(),
+            password=validated_data['password']
+        )
+        return user
+
+

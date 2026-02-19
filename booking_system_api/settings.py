@@ -85,7 +85,7 @@ DJOSER = {
                # 'password_changed_confirmation': 'djoser.email.PasswordChangedConfirmationEmail',
            },
            'SERIALIZERS': {
-               'user_create': 'djoser.serializers.UserCreateSerializer',
+               'user_create': 'core.serializers.CustomUserCreateSerializer',
                'user': 'core.serializers.CustomUserSerializer',
                'current_user': 'core.serializers.CustomUserSerializer',
                'user_delete': 'djoser.serializers.UserDeleteSerializer',
