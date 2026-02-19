@@ -25,22 +25,38 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-oea8^9auwe2%za!%$z(nku#k6fy3zu&*meu=hc24195u=-&d=d')
 DEBUG = config("DEBUG", default=False, cast=bool)
 
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,.onrender.com').split(',')
+
+# CORS Configuration
 if DEBUG:
+    # Development - allow local origins
     CORS_ALLOWED_ORIGIN_REGEXES = [
         r"^https://.*\.github\.dev$",
         r"^http://localhost(:\d+)?$",
         r"^http://127\.0\.0\.1(:\d+)?$",
     ]
-    CORS_ALLOW_ALL_ORIGINS = False
 else:
-    # Production - use FRONTEND_URL from environment
-    frontend_url = config("FRONTEND_URL", default="")
+    # Production
+    frontend_url = config('FRONTEND_URL', default='https://booking-system-frontend-dnow.onrender.com')
     CORS_ALLOWED_ORIGINS = [frontend_url] if frontend_url else []
-    CORS_ALLOW_ALL_ORIGINS = False  # Never allow all in production
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,.onrender.com').split(',')
+# Allowed HTTP methods (like Express: methods: [...])
+CORS_ALLOW_METHODS = [
+    'GET',
+    'POST',
+    'PUT',
+    'DELETE',
+]
+
+# Allowed headers (like Express: allowedHeaders: [...])
+CORS_ALLOW_HEADERS = [
+    'content-type',
+    'authorization',
+]
+
+# Additional CORS settings
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_ALL_ORIGINS = False  # Security: Never allow all in production
 
 # Application definition
 
@@ -69,13 +85,6 @@ REST_FRAMEWORK = {
            ),
        }
 
-CORS_ALLOWED_ORIGINS = config(
-    'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:5173'
-).split(',')
-
-# For development, you can allow all origins (disable in production)
-CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -89,27 +98,6 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# CORS Configuration
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-]
-
-CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
-]
 
 # Session configuration - use database-backed sessions for Render deployment
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
