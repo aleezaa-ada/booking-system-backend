@@ -105,14 +105,20 @@ SESSION_COOKIE_SECURE = not config('DEBUG', default=False, cast=bool)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
+# Get frontend URL for password reset links
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+
 DJOSER = {
-    'PASSWORD_RESET_CONFIRM_URL': 'http://localhost:3000/password-reset/{uid}/{token}',
-    'USERNAME_RESET_CONFIRM_URL': 'http://localhost:3000/username-reset/{uid}/{token}',
-    'ACTIVATION_URL': 'http://localhost:3000/activate/{uid}/{token}',
+    'PASSWORD_RESET_CONFIRM_URL': 'password-reset/{uid}/{token}',
+    'USERNAME_RESET_CONFIRM_URL': 'username-reset/{uid}/{token}',
+    'ACTIVATION_URL': 'activate/{uid}/{token}',
     'SEND_ACTIVATION_EMAIL': False,
     'SEND_CONFIRMATION_EMAIL': False,
+    'PASSWORD_RESET_CONFIRM_RETYPE': True,
+    'SET_PASSWORD_RETYPE': True,
+    'PASSWORD_RESET_SHOW_EMAIL_NOT_FOUND': False,  # Security: don't reveal if email exists
     'EMAIL': {
-        'password_reset': 'djoser.email.PasswordResetEmail',
+        'password_reset': 'core.emails.PasswordResetEmail',
         'password_changed_confirmation': 'djoser.email.PasswordChangedConfirmationEmail',
     },
     'SERIALIZERS': {
@@ -121,6 +127,8 @@ DJOSER = {
         'current_user': 'core.serializers.CustomUserSerializer',
         'user_delete': 'djoser.serializers.UserDeleteSerializer',
     },
+    'DOMAIN': FRONTEND_URL.replace('http://', '').replace('https://', ''),
+    'SITE_NAME': 'Booking System',
 }
 
 ROOT_URLCONF = 'booking_system_api.urls'

@@ -1794,3 +1794,282 @@ class ResourceSerializerTest(TestCase):
         self.assertEqual(serializer.data['availability_status'], 'available')
 
 
+class PasswordResetEmailTest(TestCase):
+    """Test password reset email functionality"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='resetuser',
+            email='resetuser@example.com',
+            password='oldpassword123'
+        )
+
+    def test_send_password_reset_email_console_backend(self):
+        """Test sending password reset email with console backend"""
+        from core.utils import send_password_reset_email
+        from django.conf import settings
+        import io
+        import sys
+
+        original_email_use = settings.EMAIL_USE
+        settings.EMAIL_USE = 'console'
+        settings.FRONTEND_URL = 'http://localhost:5173'
+
+        try:
+            # Capture stdout
+            captured_output = io.StringIO()
+            sys.stdout = captured_output
+
+            send_password_reset_email(
+                user=self.user,
+                uid='MQ',
+                token='test-token-123'
+            )
+
+            # Restore stdout
+            sys.stdout = sys.__stdout__
+            output = captured_output.getvalue()
+
+            # Check that the correct information was printed
+            self.assertIn('resetuser@example.com', output)
+            self.assertIn('http://localhost:5173/password-reset/MQ/test-token-123', output)
+            self.assertIn('Password Reset Request', output)
+        finally:
+            settings.EMAIL_USE = original_email_use
+            sys.stdout = sys.__stdout__
+
+    def test_send_password_reset_email_with_https(self):
+        """Test password reset email uses correct protocol for HTTPS"""
+        from core.utils import send_password_reset_email
+        from django.conf import settings
+        import io
+        import sys
+
+        original_email_use = settings.EMAIL_USE
+        original_frontend_url = settings.FRONTEND_URL
+        settings.EMAIL_USE = 'console'
+        settings.FRONTEND_URL = 'https://myapp.com'
+
+        try:
+            # Capture stdout
+            captured_output = io.StringIO()
+            sys.stdout = captured_output
+
+            send_password_reset_email(
+                user=self.user,
+                uid='MQ',
+                token='test-token-123'
+            )
+
+            # Restore stdout
+            sys.stdout = sys.__stdout__
+            output = captured_output.getvalue()
+
+            self.assertIn('https://myapp.com/password-reset/MQ/test-token-123', output)
+        finally:
+            settings.EMAIL_USE = original_email_use
+            settings.FRONTEND_URL = original_frontend_url
+            sys.stdout = sys.__stdout__
+
+    @patch('core.utils.SendGridAPIClient')
+    def test_send_password_reset_email_sendgrid_success(self, mock_sendgrid):
+        """Test sending password reset email via SendGrid successfully"""
+        from core.utils import send_password_reset_email
+        from django.conf import settings
+
+        # Mock SendGrid response
+        mock_sg_instance = mock_sendgrid.return_value
+        mock_response = type('obj', (object,), {'status_code': 202})
+        mock_sg_instance.send.return_value = mock_response
+
+        original_email_use = settings.EMAIL_USE
+        original_frontend_url = settings.FRONTEND_URL
+        settings.EMAIL_USE = 'sendgrid'
+        settings.SENDGRID_API_KEY = 'test-sendgrid-key'
+        settings.FROM_EMAIL = 'noreply@test.com'
+        settings.FRONTEND_URL = 'http://localhost:5173'
+
+        try:
+            result = send_password_reset_email(
+                user=self.user,
+                uid='MQ',
+                token='test-token-123'
+            )
+
+            self.assertIsNotNone(result)
+            self.assertEqual(result.status_code, 202)
+            mock_sg_instance.send.assert_called_once()
+
+            # Verify the email was sent (Mail object was created and passed to send)
+            call_args = mock_sg_instance.send.call_args
+            self.assertIsNotNone(call_args)
+        finally:
+            settings.EMAIL_USE = original_email_use
+            settings.FRONTEND_URL = original_frontend_url
+
+    @patch('core.utils.SendGridAPIClient')
+    def test_send_password_reset_email_sendgrid_failure(self, mock_sendgrid):
+        """Test SendGrid failure handling"""
+        from core.utils import send_password_reset_email
+        from django.conf import settings
+
+        # Mock SendGrid to raise an exception
+        mock_sg_instance = mock_sendgrid.return_value
+        mock_sg_instance.send.side_effect = Exception('SendGrid API Error')
+
+        original_email_use = settings.EMAIL_USE
+        original_debug = settings.DEBUG
+        settings.EMAIL_USE = 'sendgrid'
+        settings.SENDGRID_API_KEY = 'test-sendgrid-key'
+        settings.FROM_EMAIL = 'noreply@test.com'
+        settings.DEBUG = True
+
+        try:
+            with self.assertRaises(Exception):
+                send_password_reset_email(
+                    user=self.user,
+                    uid='MQ',
+                    token='test-token-123'
+                )
+        finally:
+            settings.EMAIL_USE = original_email_use
+            settings.DEBUG = original_debug
+
+    def test_password_reset_email_content_structure(self):
+        """Test that password reset email contains all required elements"""
+        from core.utils import send_password_reset_email
+        from django.conf import settings
+        import io
+        import sys
+
+        original_email_use = settings.EMAIL_USE
+        settings.EMAIL_USE = 'console'
+        settings.FRONTEND_URL = 'http://localhost:5173'
+
+        try:
+            # Capture stdout
+            captured_output = io.StringIO()
+            sys.stdout = captured_output
+
+            send_password_reset_email(
+                user=self.user,
+                uid='MQ',
+                token='test-token-abc'
+            )
+
+            # Restore stdout
+            sys.stdout = sys.__stdout__
+            output = captured_output.getvalue()
+
+            # Check for essential elements
+            self.assertIn('resetuser', output)  # Username
+            self.assertIn('password-reset', output)  # Reset path
+            self.assertIn('MQ', output)  # UID
+            self.assertIn('test-token-abc', output)  # Token
+        finally:
+            settings.EMAIL_USE = original_email_use
+            sys.stdout = sys.__stdout__
+
+
+class PasswordResetAPITest(APITestCase):
+    """Test password reset API endpoints"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='apiuser',
+            email='apiuser@example.com',
+            password='oldpassword123'
+        )
+        self.reset_password_url = '/api/auth/users/reset_password/'
+        self.reset_password_confirm_url = '/api/auth/users/reset_password_confirm/'
+
+    @patch('core.emails.send_password_reset_email')
+    def test_request_password_reset_valid_email(self, mock_send_email):
+        """Test requesting password reset with valid email"""
+        response = self.client.post(
+            self.reset_password_url,
+            {'email': 'apiuser@example.com'},
+            format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        # Email should be triggered (mocked)
+        mock_send_email.assert_called_once()
+
+    def test_request_password_reset_invalid_email(self):
+        """Test requesting password reset with invalid email format"""
+        response = self.client.post(
+            self.reset_password_url,
+            {'email': 'invalid-email'},
+            format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_request_password_reset_nonexistent_email(self):
+        """Test requesting password reset with non-existent email (should still return 204 for security)"""
+        response = self.client.post(
+            self.reset_password_url,
+            {'email': 'nonexistent@example.com'},
+            format='json'
+        )
+
+        # Should return 204 even if email doesn't exist (security best practice)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_request_password_reset_missing_email(self):
+        """Test requesting password reset without email"""
+        response = self.client.post(
+            self.reset_password_url,
+            {},
+            format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_confirm_password_reset_invalid_token(self):
+        """Test confirming password reset with invalid token"""
+        response = self.client.post(
+            self.reset_password_confirm_url,
+            {
+                'uid': 'invalid',
+                'token': 'invalid-token',
+                'new_password': 'newpassword123',
+                're_new_password': 'newpassword123'
+            },
+            format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_confirm_password_reset_mismatched_passwords(self):
+        """Test confirming password reset with mismatched passwords"""
+        response = self.client.post(
+            self.reset_password_confirm_url,
+            {
+                'uid': 'MQ',
+                'token': 'test-token',
+                'new_password': 'newpassword123',
+                're_new_password': 'differentpassword123'
+            },
+            format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_confirm_password_reset_weak_password(self):
+        """Test confirming password reset with weak password"""
+        response = self.client.post(
+            self.reset_password_confirm_url,
+            {
+                'uid': 'MQ',
+                'token': 'test-token',
+                'new_password': '123',
+                're_new_password': '123'
+            },
+            format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
