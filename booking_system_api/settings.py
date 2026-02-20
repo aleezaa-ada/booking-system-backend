@@ -219,13 +219,18 @@ EMAIL_USE = config('EMAIL_USE', default='console')  # 'console' or 'sendgrid'
 
 if EMAIL_USE == 'sendgrid':
     # Production: SendGrid
-    EMAIL_BACKEND = 'sendgrid_backend.SendgridBackend'
     SENDGRID_API_KEY = config('SENDGRID_API_KEY', default='')
-    DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@bookingsystem.com')
+    FROM_EMAIL = config('FROM_EMAIL', default='aleezaahmed315@gmail.com')
+    TO_EMAIL = config('TO_EMAIL', default='aleezaahmed315@gmail.com')
+    DEFAULT_FROM_EMAIL = FROM_EMAIL
+    # Note: We're using SendGrid API directly, not the Django backend
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # Fallback
 else:
     # Development: Console (prints to console)
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
     DEFAULT_FROM_EMAIL = 'noreply@bookingsystem.local'
+    FROM_EMAIL = DEFAULT_FROM_EMAIL
+    SENDGRID_API_KEY = ''
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/6.0/ref/settings/#default-auto-field
