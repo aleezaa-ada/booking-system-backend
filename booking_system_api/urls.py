@@ -23,5 +23,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('djoser.urls')),
     path('api/auth/', include('djoser.urls.authtoken')),  # For token-based auth
-    path('api/', include('core.urls')),  # Your core app's URLs will go here
+    path('api/', include('core.urls')),
 ]

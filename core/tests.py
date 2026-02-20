@@ -27,9 +27,7 @@ from .serializers import ResourceSerializer
 User = get_user_model()
 
 
-# ============================================================================
 # HEALTH CHECK TESTS
-# ============================================================================
 
 class HealthCheckTest(TestCase):
     """Test the health check endpoint"""
@@ -49,9 +47,7 @@ class HealthCheckTest(TestCase):
         self.assertEqual(response.status_code, 405)
 
 
-# ============================================================================
 # USER MODEL TESTS
-# ============================================================================
 
 class UserModelTest(TestCase):
     """Test the User model"""
@@ -90,9 +86,7 @@ class UserModelTest(TestCase):
         self.assertEqual(str(user), 'testuser')
 
 
-# ============================================================================
 # AUTHENTICATION API TESTS
-# ============================================================================
 
 class AuthenticationAPITest(APITestCase):
     """Test authentication endpoints"""
@@ -173,9 +167,7 @@ class AuthenticationAPITest(APITestCase):
         self.assertFalse(Token.objects.filter(key=token.key).exists())
 
 
-# ============================================================================
 # ADMIN PANEL TESTS
-# ============================================================================
 
 class AdminAccessTest(TestCase):
     """Test admin panel access"""
@@ -213,9 +205,7 @@ class AdminAccessTest(TestCase):
         self.assertEqual(response.status_code, 302)
 
 
-# ============================================================================
 # RESOURCE MODEL TESTS
-# ============================================================================
 
 class ResourceModelTest(TestCase):
     """Test the Resource model"""
@@ -245,9 +235,7 @@ class ResourceModelTest(TestCase):
         self.assertEqual(resource.description, '')
 
 
-# ============================================================================
 # RESOURCE API TESTS
-# ============================================================================
 
 class ResourceAPITest(APITestCase):
     """Test Resource API endpoints"""
@@ -329,9 +317,7 @@ class ResourceAPITest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
-# ============================================================================
 # BOOKING MODEL TESTS
-# ============================================================================
 
 class BookingModelTest(TestCase):
     """Test the Booking model"""
@@ -401,9 +387,7 @@ class BookingModelTest(TestCase):
         self.assertIsNotNone(booking.updated_at)
 
 
-# ============================================================================
 # BOOKING API TESTS
-# ============================================================================
 
 class BookingAPITest(APITestCase):
     """Test Booking API endpoints"""
@@ -580,9 +564,7 @@ class BookingAPITest(APITestCase):
         self.assertTrue(mock_email.called)
 
 
-# ============================================================================
 # BOOKING VALIDATION TESTS
-# ============================================================================
 
 class BookingValidationTest(APITestCase):
     """Test booking validation logic"""
@@ -645,7 +627,6 @@ class BookingValidationTest(APITestCase):
         start = timezone.now() + timedelta(hours=2)
         end = start + timedelta(hours=2)
 
-        # Create first booking
         Booking.objects.create(
             user=self.user,
             resource=self.resource,
@@ -653,7 +634,6 @@ class BookingValidationTest(APITestCase):
             end_time=end
         )
 
-        # Try to create overlapping booking
         overlap_start = (start + timedelta(hours=1)).isoformat()
         overlap_end = (end + timedelta(hours=1)).isoformat()
 
@@ -672,7 +652,6 @@ class BookingValidationTest(APITestCase):
         start1 = timezone.now() + timedelta(hours=2)
         end1 = start1 + timedelta(hours=2)
 
-        # Create first booking
         Booking.objects.create(
             user=self.user,
             resource=self.resource,
@@ -680,7 +659,6 @@ class BookingValidationTest(APITestCase):
             end_time=end1
         )
 
-        # Create adjacent booking (starts when first ends)
         start2 = end1.isoformat()
         end2 = (end1 + timedelta(hours=2)).isoformat()
 
@@ -693,9 +671,7 @@ class BookingValidationTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
 
-# ============================================================================
 # RESOURCE AVAILABILITY TESTS
-# ============================================================================
 
 class ResourceAvailabilityTest(TestCase):
     """Test resource availability status logic"""
@@ -772,9 +748,7 @@ class ResourceAvailabilityTest(TestCase):
         self.assertEqual(serializer.data['availability_status'], 'available')
 
 
-# ============================================================================
 # EDGE CASE TESTS
-# ============================================================================
 
 class EdgeCaseTests(APITestCase):
     """Test edge cases and boundary conditions"""
@@ -807,7 +781,6 @@ class EdgeCaseTests(APITestCase):
         start = (timezone.now() + timedelta(hours=1)).isoformat()
         end = (timezone.now() + timedelta(hours=2)).isoformat()
 
-        # Book first resource
         data1 = {
             'resource': self.resource.id,
             'start_time': start,
@@ -817,7 +790,6 @@ class EdgeCaseTests(APITestCase):
             response1 = self.client.post('/api/bookings/', data1)
         self.assertEqual(response1.status_code, status.HTTP_201_CREATED)
 
-        # Book second resource at same time - should succeed
         data2 = {
             'resource': resource2.id,
             'start_time': start,
@@ -832,7 +804,6 @@ class EdgeCaseTests(APITestCase):
         start = timezone.now() + timedelta(hours=1)
         end = start + timedelta(hours=2)
 
-        # Create and cancel a booking
         booking = Booking.objects.create(
             user=self.user,
             resource=self.resource,
@@ -841,7 +812,6 @@ class EdgeCaseTests(APITestCase):
             status='cancelled'
         )
 
-        # Try to book the same slot - should succeed
         data = {
             'resource': self.resource.id,
             'start_time': start.isoformat(),
@@ -849,5 +819,3 @@ class EdgeCaseTests(APITestCase):
         }
         with patch('core.views.send_booking_notification_email'):
             response = self.client.post('/api/bookings/', data)
-        # Note: This might fail due to unique_together constraint
-        # If it does, the constraint should be updated to exclude cancelled bookings

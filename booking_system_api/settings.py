@@ -72,7 +72,6 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',  # Required by Djoser for token auth
     'corsheaders',
     'djoser',
-    # Your apps
     'core',
 ]
 
@@ -81,14 +80,14 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.TokenAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',  # Default to authenticated access
+        'rest_framework.permissions.IsAuthenticated',
     ),
 }
 
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # Add whitenoise for static files
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -101,7 +100,7 @@ MIDDLEWARE = [
 
 # Session configuration - use database-backed sessions for Render deployment
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
-SESSION_COOKIE_SECURE = not config('DEBUG', default=False, cast=bool)  # Use secure cookies in production
+SESSION_COOKIE_SECURE = not config('DEBUG', default=False, cast=bool)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
@@ -109,11 +108,11 @@ DJOSER = {
     'PASSWORD_RESET_CONFIRM_URL': 'http://localhost:3000/password-reset/{uid}/{token}',
     'USERNAME_RESET_CONFIRM_URL': 'http://localhost:3000/username-reset/{uid}/{token}',
     'ACTIVATION_URL': 'http://localhost:3000/activate/{uid}/{token}',
-    'SEND_ACTIVATION_EMAIL': False,  # Set to True if you want email activation
-    'SEND_CONFIRMATION_EMAIL': False,  # Set to True if you want email confirmation
+    'SEND_ACTIVATION_EMAIL': False,
+    'SEND_CONFIRMATION_EMAIL': False,
     'EMAIL': {
         'password_reset': 'djoser.email.PasswordResetEmail',
-        # 'password_changed_confirmation': 'djoser.email.PasswordChangedConfirmationEmail',
+        'password_changed_confirmation': 'djoser.email.PasswordChangedConfirmationEmail',
     },
     'SERIALIZERS': {
         'user_create': 'core.serializers.CustomUserCreateSerializer',
@@ -146,8 +145,6 @@ WSGI_APPLICATION = 'booking_system_api.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-# Use DATABASE_URL environment variable if available (Render provides this)
-# Otherwise fall back to local PostgreSQL configuration
 DATABASE_URL = config('DATABASE_URL', default=None)
 
 if DATABASE_URL:
@@ -218,7 +215,6 @@ STORAGES = {
 EMAIL_USE = config('EMAIL_USE', default='console')  # 'console' or 'sendgrid'
 
 if EMAIL_USE == 'sendgrid':
-    # Production: SendGrid
     SENDGRID_API_KEY = config('SENDGRID_API_KEY', default='')
     FROM_EMAIL = config('FROM_EMAIL', default='aleezaahmed315@gmail.com')
     TO_EMAIL = config('TO_EMAIL', default='aleezaahmed315@gmail.com')
@@ -226,7 +222,6 @@ if EMAIL_USE == 'sendgrid':
     # Note: We're using SendGrid API directly, not the Django backend
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # Fallback
 else:
-    # Development: Console (prints to console)
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
     DEFAULT_FROM_EMAIL = 'noreply@bookingsystem.local'
     FROM_EMAIL = DEFAULT_FROM_EMAIL
