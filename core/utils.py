@@ -3,6 +3,7 @@ from django.conf import settings
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
+
 def send_booking_notification_email(booking, subject, template_name):
     user_email = booking.user.email
     resource_name = booking.resource.name
@@ -24,9 +25,9 @@ def send_booking_notification_email(booking, subject, template_name):
 
     # Plain text message
     plain_message = f"Dear {booking.user.username},\n\n" \
-                    f"Your booking for {resource_name} from {start_time} to {end_time} has {status_text}.\n" \
-                    f"Notes: {notes}\n\n" \
-                    f"Thank you for using our booking system."
+        f"Your booking for {resource_name} from {start_time} to {end_time} has {status_text}.\n" \
+        f"Notes: {notes}\n\n" \
+        f"Thank you for using our booking system."
 
     # HTML message (for SendGrid)
     html_message = f"""

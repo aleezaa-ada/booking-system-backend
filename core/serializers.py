@@ -5,6 +5,7 @@ from django.utils import timezone
 
 User = get_user_model()
 
+
 class ResourceSerializer(serializers.ModelSerializer):
     availability_status = serializers.SerializerMethodField()
 
@@ -44,6 +45,7 @@ class ResourceSerializer(serializers.ModelSerializer):
 
         return 'available'
 
+
 class BookingSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(read_only=True, default=serializers.CurrentUserDefault())
     resource_name = serializers.CharField(source='resource.name', read_only=True)
@@ -61,7 +63,7 @@ class BookingSerializer(serializers.ModelSerializer):
     def validate(self, data):
         # Only validate timing/resource if those fields are being updated
         # (For PATCH requests, only specific fields are sent)
-        
+
         if 'start_time' in data and 'end_time' in data and 'resource' in data:
             # Only apply the 30-minute advance booking rule for NEW bookings
             # When updating existing bookings, skip this validation
@@ -130,7 +132,7 @@ class BookingSerializer(serializers.ModelSerializer):
                                 f"{suggested_start.strftime('%Y-%m-%d %H:%M')} - {suggested_end.strftime('%H:%M')}"
                             )
 
-                error_msg = f"Cannot create booking - this resource is already booked during your selected time. "
+                error_msg = "Cannot create booking - this resource is already booked during your selected time. "
                 error_msg += f"Conflicting booking(s): {', '.join(conflict_details)}. "
 
                 if suggestions:
@@ -199,5 +201,3 @@ class CustomUserCreateSerializer(serializers.ModelSerializer):
             password=validated_data['password']
         )
         return user
-
-

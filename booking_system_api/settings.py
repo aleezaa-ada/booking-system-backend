@@ -69,7 +69,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # Third-party apps
     'rest_framework',
-    'rest_framework.authtoken', # Required by Djoser for token auth
+    'rest_framework.authtoken',  # Required by Djoser for token auth
     'corsheaders',
     'djoser',
     # Your apps
@@ -77,13 +77,13 @@ INSTALLED_APPS = [
 ]
 
 REST_FRAMEWORK = {
-           'DEFAULT_AUTHENTICATION_CLASSES': (
-               'rest_framework.authentication.TokenAuthentication',
-           ),
-           'DEFAULT_PERMISSION_CLASSES': (
-               'rest_framework.permissions.IsAuthenticated', # Default to authenticated access
-           ),
-       }
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework.authentication.TokenAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',  # Default to authenticated access
+    ),
+}
 
 
 MIDDLEWARE = [
@@ -106,22 +106,22 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
 DJOSER = {
-           'PASSWORD_RESET_CONFIRM_URL': 'http://localhost:3000/password-reset/{uid}/{token}',
-           'USERNAME_RESET_CONFIRM_URL': 'http://localhost:3000/username-reset/{uid}/{token}',
-           'ACTIVATION_URL': 'http://localhost:3000/activate/{uid}/{token}',
-           'SEND_ACTIVATION_EMAIL': False, # Set to True if you want email activation
-           'SEND_CONFIRMATION_EMAIL': False, # Set to True if you want email confirmation
-           'EMAIL': {
-               'password_reset': 'djoser.email.PasswordResetEmail',
-               # 'password_changed_confirmation': 'djoser.email.PasswordChangedConfirmationEmail',
-           },
-           'SERIALIZERS': {
-               'user_create': 'core.serializers.CustomUserCreateSerializer',
-               'user': 'core.serializers.CustomUserSerializer',
-               'current_user': 'core.serializers.CustomUserSerializer',
-               'user_delete': 'djoser.serializers.UserDeleteSerializer',
-           },
-       }
+    'PASSWORD_RESET_CONFIRM_URL': 'http://localhost:3000/password-reset/{uid}/{token}',
+    'USERNAME_RESET_CONFIRM_URL': 'http://localhost:3000/username-reset/{uid}/{token}',
+    'ACTIVATION_URL': 'http://localhost:3000/activate/{uid}/{token}',
+    'SEND_ACTIVATION_EMAIL': False,  # Set to True if you want email activation
+    'SEND_CONFIRMATION_EMAIL': False,  # Set to True if you want email confirmation
+    'EMAIL': {
+        'password_reset': 'djoser.email.PasswordResetEmail',
+        # 'password_changed_confirmation': 'djoser.email.PasswordChangedConfirmationEmail',
+    },
+    'SERIALIZERS': {
+        'user_create': 'core.serializers.CustomUserCreateSerializer',
+        'user': 'core.serializers.CustomUserSerializer',
+        'current_user': 'core.serializers.CustomUserSerializer',
+        'user_delete': 'djoser.serializers.UserDeleteSerializer',
+    },
+}
 
 ROOT_URLCONF = 'booking_system_api.urls'
 
@@ -235,4 +235,3 @@ else:
 # Default primary key field type
 # https://docs.djangoproject.com/en/6.0/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-

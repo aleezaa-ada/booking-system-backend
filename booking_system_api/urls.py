@@ -22,6 +22,6 @@ urlpatterns = [
     path('health/', views.health_check, name='health_check'),  # Health check for Render
     path('admin/', admin.site.urls),
     path('api/auth/', include('djoser.urls')),
-    path('api/auth/', include('djoser.urls.authtoken')), # For token-based auth
-    path('api/', include('core.urls')), # Your core app's URLs will go here
+    path('api/auth/', include('djoser.urls.authtoken')),  # For token-based auth
+    path('api/', include('core.urls')),  # Your core app's URLs will go here
 ]

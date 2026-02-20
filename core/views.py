@@ -1,27 +1,30 @@
-from django.shortcuts import render
 from rest_framework import viewsets, permissions
 from rest_framework.exceptions import PermissionDenied
 from .models import Resource, Booking
 from .serializers import ResourceSerializer, BookingSerializer
-from .utils import send_booking_notification_email 
+from .utils import send_booking_notification_email
+
 
 class IsAdminOrReadOnly(permissions.BasePermission):
     """
     Custom permission to only allow admins to edit resources.
     """
+
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
-            return True # Allow GET, HEAD, OPTIONS for anyone
-        return request.user and request.user.is_staff # Only staff (admin) can CUD
+            return True  # Allow GET, HEAD, OPTIONS for anyone
+        return request.user and request.user.is_staff  # Only staff (admin) can CUD
+
 
 class ResourceViewSet(viewsets.ModelViewSet):
     queryset = Resource.objects.all()
     serializer_class = ResourceSerializer
-    permission_classes = [IsAdminOrReadOnly] # Use custom permission
+    permission_classes = [IsAdminOrReadOnly]  # Use custom permission
+
 
 class BookingViewSet(viewsets.ModelViewSet):
     serializer_class = BookingSerializer
-    permission_classes = [permissions.IsAuthenticated] # Only authenticated users can interact
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         """
@@ -29,9 +32,29 @@ class BookingViewSet(viewsets.ModelViewSet):
         for the currently authenticated user, or all bookings for admin.
         """
         user = self.request.user
-        if user.is_staff: # Admin users can see all bookings
+        if user.is_staff:
             return Booking.objects.all()
-        return Booking.objects.filter(user=user) # Regular users only see their own
+        return Booking.objects.filter(user=user)
+
+    def get_object(self):
+        """
+        Override to check all bookings first, then raise 403 if user doesn't own it.
+        This ensures we return 403 Forbidden instead of 404 Not Found.
+        """
+        queryset = Booking.objects.all()  # Check all bookings first
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        filter_kwargs = {self.lookup_field: self.kwargs[lookup_url_kwarg]}
+        obj = queryset.filter(**filter_kwargs).first()
+
+        if obj is None:
+            from rest_framework.exceptions import NotFound
+            raise NotFound()
+
+        # Check if user has permission to access this booking
+        if not self.request.user.is_staff and obj.user != self.request.user:
+            raise PermissionDenied("You can only access your own bookings.")
+
+        return obj
 
     def check_object_permissions(self, request, obj):
         """
@@ -70,4 +93,3 @@ class BookingViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         send_booking_notification_email(instance, "Booking Cancellation", "booking_cancelled_template")
         instance.delete()
-
