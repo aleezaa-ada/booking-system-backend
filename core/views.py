@@ -1,7 +1,9 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
 from .models import Resource, Booking
-from .serializers import ResourceSerializer, BookingSerializer
+from .serializers import ResourceSerializer, BookingSerializer, UserProfileSerializer
 from .utils import send_booking_notification_email
 
 
@@ -93,3 +95,41 @@ class BookingViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         send_booking_notification_email(instance, "Booking Cancellation", "booking_cancelled_template")
         instance.delete()
+
+
+@api_view(['PUT', 'PATCH'])
+@permission_classes([permissions.IsAuthenticated])
+def update_profile_picture(request):
+    """
+    Update the user's profile picture with Cloudinary URL and public_id
+    """
+    from .models import UserProfile
+
+    # Get or create profile if it doesn't exist
+    profile, created = UserProfile.objects.get_or_create(user=request.user)
+
+    serializer = UserProfileSerializer(profile, data=request.data, partial=True)
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['DELETE'])
+@permission_classes([permissions.IsAuthenticated])
+def delete_profile_picture(request):
+    """
+    Remove the user's profile picture
+    """
+    from .models import UserProfile
+
+    # Get or create profile if it doesn't exist
+    profile, created = UserProfile.objects.get_or_create(user=request.user)
+
+    profile.profile_picture = None
+    profile.cloudinary_public_id = None
+    profile.save()
+
+    return Response({'message': 'Profile picture removed successfully'}, status=status.HTTP_200_OK)

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Resource, Booking
+from .models import Resource, Booking, UserProfile
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
@@ -88,18 +88,19 @@ class BookingSerializer(serializers.ModelSerializer):
             end_time = data['end_time']
 
             # Exclude the current booking if it's an update
+            # Also exclude cancelled and rejected bookings as they don't block the slot
             if self.instance:
                 overlapping_bookings = Booking.objects.filter(
                     resource=resource,
                     start_time__lt=end_time,
                     end_time__gt=start_time
-                ).exclude(pk=self.instance.pk)
+                ).exclude(pk=self.instance.pk).exclude(status__in=['cancelled', 'rejected'])
             else:
                 overlapping_bookings = Booking.objects.filter(
                     resource=resource,
                     start_time__lt=end_time,
                     end_time__gt=start_time
-                )
+                ).exclude(status__in=['cancelled', 'rejected'])
 
             if overlapping_bookings.exists():
                 # Get information about the conflicting booking(s)
@@ -114,7 +115,7 @@ class BookingSerializer(serializers.ModelSerializer):
                     resource=resource,
                     start_time__date=start_time.date(),
                     start_time__gte=timezone.now()
-                ).order_by('start_time')
+                ).exclude(status__in=['cancelled', 'rejected']).order_by('start_time')
 
                 suggestions = []
                 if all_bookings_today.exists():
@@ -151,10 +152,30 @@ class CustomUserSerializer(serializers.ModelSerializer):
     Custom user serializer that includes is_staff field
     so frontend can check if user is admin
     """
+    profile_picture = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'is_staff', 'is_active')
+        fields = ('id', 'username', 'email', 'is_staff', 'is_active', 'profile_picture')
         read_only_fields = ('id', 'is_staff', 'is_active')
+
+    def get_profile_picture(self, obj):
+        try:
+            if hasattr(obj, 'profile') and obj.profile.profile_picture:
+                return obj.profile.profile_picture
+        except UserProfile.DoesNotExist:
+            pass
+        return None
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating user profile picture
+    """
+    class Meta:
+        model = UserProfile
+        fields = ('profile_picture', 'cloudinary_public_id', 'updated_at')
+        read_only_fields = ('updated_at',)
 
 
 class CustomUserCreateSerializer(serializers.ModelSerializer):

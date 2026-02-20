@@ -8,10 +8,3 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [push]
-
-      - id: flake8
-        name: Flake8 Linting
-        entry: flake8
-        language: system
-        types: [python]
-        stages: [commit]

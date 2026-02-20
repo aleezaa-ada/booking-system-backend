@@ -800,10 +800,17 @@ class EdgeCaseTests(APITestCase):
         self.assertEqual(response2.status_code, status.HTTP_201_CREATED)
 
     def test_cancelled_booking_doesnt_block_slot(self):
-        """Test that cancelled bookings don't prevent new bookings"""
+        """Test that cancelled bookings don't prevent new bookings from other users"""
+        # Create another user for the second booking
+        user2 = User.objects.create_user(
+            username='user2',
+            password='pass123'
+        )
+
         start = timezone.now() + timedelta(hours=1)
         end = start + timedelta(hours=2)
 
+        # User 1 creates and then cancels a booking
         booking = Booking.objects.create(
             user=self.user,
             resource=self.resource,
@@ -812,6 +819,8 @@ class EdgeCaseTests(APITestCase):
             status='cancelled'
         )
 
+        # User 2 should be able to book the same slot
+        self.client.force_authenticate(user=user2)
         data = {
             'resource': self.resource.id,
             'start_time': start.isoformat(),
@@ -819,3 +828,386 @@ class EdgeCaseTests(APITestCase):
         }
         with patch('core.views.send_booking_notification_email'):
             response = self.client.post('/api/bookings/', data)
+
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+
+# USER PROFILE MODEL TESTS
+
+class UserProfileModelTest(TestCase):
+    """Test the UserProfile model"""
+
+    def test_user_profile_created_on_user_creation(self):
+        """Test that a UserProfile is automatically created when a User is created"""
+        user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.assertTrue(hasattr(user, 'profile'))
+        self.assertIsNotNone(user.profile)
+        self.assertEqual(user.profile.user, user)
+
+    def test_user_profile_string_representation(self):
+        """Test UserProfile model string representation"""
+        user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        expected_string = "testuser's profile"
+        self.assertEqual(str(user.profile), expected_string)
+
+    def test_user_profile_default_values(self):
+        """Test that UserProfile has correct default values"""
+        user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        profile = user.profile
+        self.assertIsNone(profile.profile_picture)
+        self.assertIsNone(profile.cloudinary_public_id)
+        self.assertIsNotNone(profile.updated_at)
+
+    def test_user_profile_update_picture(self):
+        """Test updating profile picture URL"""
+        user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        profile = user.profile
+
+        picture_url = 'https://cloudinary.com/image/test123.jpg'
+        public_id = 'profile_pictures/test123'
+
+        profile.profile_picture = picture_url
+        profile.cloudinary_public_id = public_id
+        profile.save()
+
+        profile.refresh_from_db()
+        self.assertEqual(profile.profile_picture, picture_url)
+        self.assertEqual(profile.cloudinary_public_id, public_id)
+
+    def test_user_profile_remove_picture(self):
+        """Test removing profile picture"""
+        user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        profile = user.profile
+
+        # Set picture first
+        profile.profile_picture = 'https://cloudinary.com/image/test123.jpg'
+        profile.cloudinary_public_id = 'profile_pictures/test123'
+        profile.save()
+
+        # Remove picture
+        profile.profile_picture = None
+        profile.cloudinary_public_id = None
+        profile.save()
+
+        profile.refresh_from_db()
+        self.assertIsNone(profile.profile_picture)
+        self.assertIsNone(profile.cloudinary_public_id)
+
+    def test_user_profile_updated_at_changes(self):
+        """Test that updated_at timestamp changes on update"""
+        user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        profile = user.profile
+        original_updated_at = profile.updated_at
+
+        # Wait a moment and update
+        from time import sleep
+        sleep(0.1)
+
+        profile.profile_picture = 'https://cloudinary.com/image/test123.jpg'
+        profile.save()
+
+        profile.refresh_from_db()
+        self.assertGreater(profile.updated_at, original_updated_at)
+
+    def test_user_profile_cascade_delete(self):
+        """Test that UserProfile is deleted when User is deleted"""
+        user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        profile_id = user.profile.id
+
+        user.delete()
+
+        from .models import UserProfile
+        self.assertFalse(UserProfile.objects.filter(id=profile_id).exists())
+
+    def test_user_profile_url_field_max_length(self):
+        """Test that profile_picture URL can handle long URLs"""
+        user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        profile = user.profile
+
+        # Test with a long URL (but within 500 character limit)
+        long_url = 'https://cloudinary.com/image/' + 'a' * 450 + '.jpg'
+        profile.profile_picture = long_url
+        profile.save()
+
+        profile.refresh_from_db()
+        self.assertEqual(profile.profile_picture, long_url)
+
+
+# PROFILE PICTURE API TESTS
+
+class ProfilePictureAPITest(APITestCase):
+    """Test Profile Picture API endpoints"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.other_user = User.objects.create_user(
+            username='otheruser',
+            email='other@example.com',
+            password='otherpass123'
+        )
+
+    def test_update_profile_picture_authenticated(self):
+        """Test updating profile picture as authenticated user"""
+        self.client.force_authenticate(user=self.user)
+
+        data = {
+            'profile_picture': 'https://cloudinary.com/image/test123.jpg',
+            'cloudinary_public_id': 'profile_pictures/test123'
+        }
+
+        response = self.client.patch('/api/profile/picture/', data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.profile_picture, data['profile_picture'])
+        self.assertEqual(self.user.profile.cloudinary_public_id, data['cloudinary_public_id'])
+
+    def test_update_profile_picture_unauthenticated(self):
+        """Test that unauthenticated users cannot update profile picture"""
+        data = {
+            'profile_picture': 'https://cloudinary.com/image/test123.jpg',
+            'cloudinary_public_id': 'profile_pictures/test123'
+        }
+
+        response = self.client.patch('/api/profile/picture/', data)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_update_profile_picture_partial_update(self):
+        """Test partial update of profile picture (only URL)"""
+        self.client.force_authenticate(user=self.user)
+
+        data = {
+            'profile_picture': 'https://cloudinary.com/image/test123.jpg'
+        }
+
+        response = self.client.patch('/api/profile/picture/', data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.profile_picture, data['profile_picture'])
+
+    def test_update_profile_picture_put_method(self):
+        """Test that PUT method also works for updating profile picture"""
+        self.client.force_authenticate(user=self.user)
+
+        data = {
+            'profile_picture': 'https://cloudinary.com/image/test123.jpg',
+            'cloudinary_public_id': 'profile_pictures/test123'
+        }
+
+        response = self.client.put('/api/profile/picture/', data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_update_profile_picture_creates_profile_if_not_exists(self):
+        """Test that updating profile picture creates profile if it doesn't exist"""
+        # Manually delete the profile to test auto-creation
+        self.user.profile.delete()
+
+        self.client.force_authenticate(user=self.user)
+
+        data = {
+            'profile_picture': 'https://cloudinary.com/image/test123.jpg',
+            'cloudinary_public_id': 'profile_pictures/test123'
+        }
+
+        response = self.client.patch('/api/profile/picture/', data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify profile was created
+        from .models import UserProfile
+        self.assertTrue(UserProfile.objects.filter(user=self.user).exists())
+
+    def test_update_profile_picture_multiple_times(self):
+        """Test updating profile picture multiple times"""
+        self.client.force_authenticate(user=self.user)
+
+        # First update
+        data1 = {
+            'profile_picture': 'https://cloudinary.com/image/test1.jpg',
+            'cloudinary_public_id': 'profile_pictures/test1'
+        }
+        response1 = self.client.patch('/api/profile/picture/', data1)
+        self.assertEqual(response1.status_code, status.HTTP_200_OK)
+
+        # Second update (should replace first)
+        data2 = {
+            'profile_picture': 'https://cloudinary.com/image/test2.jpg',
+            'cloudinary_public_id': 'profile_pictures/test2'
+        }
+        response2 = self.client.patch('/api/profile/picture/', data2)
+        self.assertEqual(response2.status_code, status.HTTP_200_OK)
+
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.profile_picture, data2['profile_picture'])
+        self.assertEqual(self.user.profile.cloudinary_public_id, data2['cloudinary_public_id'])
+
+    def test_delete_profile_picture_authenticated(self):
+        """Test deleting profile picture as authenticated user"""
+        # Set a profile picture first
+        self.user.profile.profile_picture = 'https://cloudinary.com/image/test123.jpg'
+        self.user.profile.cloudinary_public_id = 'profile_pictures/test123'
+        self.user.profile.save()
+
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.delete('/api/profile/picture/delete/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.user.profile.refresh_from_db()
+        self.assertIsNone(self.user.profile.profile_picture)
+        self.assertIsNone(self.user.profile.cloudinary_public_id)
+
+    def test_delete_profile_picture_unauthenticated(self):
+        """Test that unauthenticated users cannot delete profile picture"""
+        response = self.client.delete('/api/profile/picture/delete/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_delete_profile_picture_when_none_exists(self):
+        """Test deleting profile picture when none exists (should not error)"""
+        self.client.force_authenticate(user=self.user)
+
+        # Ensure no picture is set
+        self.user.profile.profile_picture = None
+        self.user.profile.cloudinary_public_id = None
+        self.user.profile.save()
+
+        response = self.client.delete('/api/profile/picture/delete/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_delete_profile_picture_creates_profile_if_not_exists(self):
+        """Test that deleting profile picture creates profile if it doesn't exist"""
+        # Manually delete the profile
+        self.user.profile.delete()
+
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.delete('/api/profile/picture/delete/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify profile was created
+        from .models import UserProfile
+        self.assertTrue(UserProfile.objects.filter(user=self.user).exists())
+
+    def test_users_can_only_update_own_profile(self):
+        """Test that users can only update their own profile picture"""
+        self.client.force_authenticate(user=self.user)
+
+        data = {
+            'profile_picture': 'https://cloudinary.com/image/test123.jpg',
+            'cloudinary_public_id': 'profile_pictures/test123'
+        }
+
+        response = self.client.patch('/api/profile/picture/', data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify only the authenticated user's profile was updated
+        self.user.profile.refresh_from_db()
+        self.other_user.profile.refresh_from_db()
+
+        self.assertEqual(self.user.profile.profile_picture, data['profile_picture'])
+        self.assertIsNone(self.other_user.profile.profile_picture)
+
+    def test_profile_picture_url_validation(self):
+        """Test that invalid URLs are rejected"""
+        self.client.force_authenticate(user=self.user)
+
+        data = {
+            'profile_picture': 'not-a-valid-url',
+            'cloudinary_public_id': 'profile_pictures/test123'
+        }
+
+        response = self.client.patch('/api/profile/picture/', data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_profile_picture_response_includes_updated_at(self):
+        """Test that response includes updated_at timestamp"""
+        self.client.force_authenticate(user=self.user)
+
+        data = {
+            'profile_picture': 'https://cloudinary.com/image/test123.jpg',
+            'cloudinary_public_id': 'profile_pictures/test123'
+        }
+
+        response = self.client.patch('/api/profile/picture/', data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('updated_at', response.data)
+
+
+# CUSTOM USER SERIALIZER TESTS
+
+class CustomUserSerializerTest(APITestCase):
+    """Test that CustomUserSerializer includes profile picture"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        # Set a profile picture
+        self.user.profile.profile_picture = 'https://cloudinary.com/image/test123.jpg'
+        self.user.profile.cloudinary_public_id = 'profile_pictures/test123'
+        self.user.profile.save()
+
+    def test_current_user_endpoint_includes_profile_picture(self):
+        """Test that /api/auth/users/me/ includes profile_picture"""
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get('/api/auth/users/me/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('profile_picture', response.data)
+        self.assertEqual(response.data['profile_picture'], self.user.profile.profile_picture)
+
+    def test_current_user_endpoint_profile_picture_null(self):
+        """Test that profile_picture is null when not set"""
+        # Create a new user without profile picture
+        new_user = User.objects.create_user(
+            username='newuser',
+            email='new@example.com',
+            password='newpass123'
+        )
+
+        self.client.force_authenticate(user=new_user)
+
+        response = self.client.get('/api/auth/users/me/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('profile_picture', response.data)
+        self.assertIsNone(response.data['profile_picture'])
+

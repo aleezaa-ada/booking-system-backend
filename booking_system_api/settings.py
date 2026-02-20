@@ -40,15 +40,16 @@ else:
     frontend_url = config('FRONTEND_URL', default='https://booking-system-frontend-dnow.onrender.com')
     CORS_ALLOWED_ORIGINS = [frontend_url] if frontend_url else []
 
-# Allowed HTTP methods (like Express: methods: [...])
+# Allowed HTTP methods
 CORS_ALLOW_METHODS = [
     'GET',
     'POST',
     'PUT',
     'DELETE',
+    'PATCH'
 ]
 
-# Allowed headers (like Express: allowedHeaders: [...])
+# Allowed headers
 CORS_ALLOW_HEADERS = [
     'content-type',
     'authorization',
