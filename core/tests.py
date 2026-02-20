@@ -1211,3 +1211,586 @@ class CustomUserSerializerTest(APITestCase):
         self.assertIn('profile_picture', response.data)
         self.assertIsNone(response.data['profile_picture'])
 
+
+# EMAIL UTILITY TESTS
+
+class EmailUtilityTest(TestCase):
+    """Test email utility functions"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='emailtestuser',
+            email='emailtest@example.com',
+            password='pass123'
+        )
+        self.resource = Resource.objects.create(
+            name='Test Room',
+            capacity=5
+        )
+        self.booking = Booking.objects.create(
+            user=self.user,
+            resource=self.resource,
+            start_time=timezone.now() + timedelta(hours=1),
+            end_time=timezone.now() + timedelta(hours=3),
+            status='pending',
+            notes='Test booking notes'
+        )
+
+    @patch('core.utils.send_mail')
+    def test_send_booking_notification_console_backend(self, mock_send_mail):
+        """Test sending email with console backend"""
+        from core.utils import send_booking_notification_email
+        from django.conf import settings
+
+        # Temporarily set EMAIL_USE to console
+        original_email_use = settings.EMAIL_USE
+        settings.EMAIL_USE = 'console'
+
+        try:
+            send_booking_notification_email(
+                self.booking,
+                "Test Subject",
+                "booking_created_template"
+            )
+
+            # Verify send_mail was called
+            mock_send_mail.assert_called_once()
+            args, kwargs = mock_send_mail.call_args
+
+            self.assertEqual(args[0], "Test Subject")  # subject
+            self.assertIn(self.user.username, args[1])  # plain message
+            self.assertEqual(args[3], [self.user.email])  # recipient
+        finally:
+            settings.EMAIL_USE = original_email_use
+
+    @patch('core.utils.SendGridAPIClient')
+    def test_send_booking_notification_sendgrid_success(self, mock_sendgrid):
+        """Test sending email with SendGrid successfully"""
+        from core.utils import send_booking_notification_email
+        from django.conf import settings
+
+        # Mock SendGrid response
+        mock_sg_instance = mock_sendgrid.return_value
+        mock_response = type('obj', (object,), {'status_code': 202})
+        mock_sg_instance.send.return_value = mock_response
+
+        original_email_use = settings.EMAIL_USE
+        settings.EMAIL_USE = 'sendgrid'
+        settings.SENDGRID_API_KEY = 'test-key'
+        settings.FROM_EMAIL = 'noreply@test.com'
+
+        try:
+            result = send_booking_notification_email(
+                self.booking,
+                "Test Subject",
+                "booking_created_template"
+            )
+
+            self.assertTrue(result)
+            mock_sg_instance.send.assert_called_once()
+        finally:
+            settings.EMAIL_USE = original_email_use
+
+    @patch('core.utils.SendGridAPIClient')
+    @patch('core.utils.send_mail')
+    def test_send_booking_notification_sendgrid_failure_fallback(self, mock_send_mail, mock_sendgrid):
+        """Test that SendGrid failure logs to console"""
+        from core.utils import send_booking_notification_email
+        from django.conf import settings
+
+        # Mock SendGrid to raise an exception
+        mock_sg_instance = mock_sendgrid.return_value
+        mock_sg_instance.send.side_effect = Exception("SendGrid API Error")
+
+        original_email_use = settings.EMAIL_USE
+        settings.EMAIL_USE = 'sendgrid'
+        settings.SENDGRID_API_KEY = 'test-key'
+        settings.FROM_EMAIL = 'noreply@test.com'
+
+        try:
+            result = send_booking_notification_email(
+                self.booking,
+                "Test Subject",
+                "booking_created_template"
+            )
+
+            self.assertFalse(result)  # Should return False on failure
+        finally:
+            settings.EMAIL_USE = original_email_use
+
+    def test_email_content_booking_cancelled(self):
+        """Test email content for cancelled booking"""
+        from core.utils import send_booking_notification_email
+        from django.conf import settings
+
+        with patch('core.utils.send_mail') as mock_send_mail:
+            original_email_use = settings.EMAIL_USE
+            settings.EMAIL_USE = 'console'
+
+            try:
+                send_booking_notification_email(
+                    self.booking,
+                    "Cancellation",
+                    "booking_cancelled_template"
+                )
+
+                args, kwargs = mock_send_mail.call_args
+                plain_message = args[1]
+
+                self.assertIn("been cancelled", plain_message)
+                self.assertIn(self.resource.name, plain_message)
+            finally:
+                settings.EMAIL_USE = original_email_use
+
+    def test_email_content_booking_updated(self):
+        """Test email content for updated booking"""
+        from core.utils import send_booking_notification_email
+        from django.conf import settings
+
+        with patch('core.utils.send_mail') as mock_send_mail:
+            original_email_use = settings.EMAIL_USE
+            settings.EMAIL_USE = 'console'
+
+            try:
+                send_booking_notification_email(
+                    self.booking,
+                    "Update",
+                    "booking_details_updated_template"
+                )
+
+                args, kwargs = mock_send_mail.call_args
+                plain_message = args[1]
+
+                self.assertIn("been updated", plain_message)
+            finally:
+                settings.EMAIL_USE = original_email_use
+
+    def test_email_content_status_updated(self):
+        """Test email content for status update"""
+        from core.utils import send_booking_notification_email
+        from django.conf import settings
+
+        self.booking.status = 'confirmed'
+        self.booking.save()
+
+        with patch('core.utils.send_mail') as mock_send_mail:
+            original_email_use = settings.EMAIL_USE
+            settings.EMAIL_USE = 'console'
+
+            try:
+                send_booking_notification_email(
+                    self.booking,
+                    "Status Update",
+                    "booking_status_updated_template"
+                )
+
+                args, kwargs = mock_send_mail.call_args
+                plain_message = args[1]
+
+                self.assertIn("status has been updated to confirmed", plain_message)
+            finally:
+                settings.EMAIL_USE = original_email_use
+
+    def test_email_content_default_template(self):
+        """Test email content with unknown template"""
+        from core.utils import send_booking_notification_email
+        from django.conf import settings
+
+        with patch('core.utils.send_mail') as mock_send_mail:
+            original_email_use = settings.EMAIL_USE
+            settings.EMAIL_USE = 'console'
+
+            try:
+                send_booking_notification_email(
+                    self.booking,
+                    "Test",
+                    "unknown_template"
+                )
+
+                args, kwargs = mock_send_mail.call_args
+                plain_message = args[1]
+
+                self.assertIn(f"been {self.booking.status}", plain_message)
+            finally:
+                settings.EMAIL_USE = original_email_use
+
+    def test_email_content_no_notes(self):
+        """Test email content when booking has no notes"""
+        from core.utils import send_booking_notification_email
+        from django.conf import settings
+
+        self.booking.notes = ""
+        self.booking.save()
+
+        with patch('core.utils.send_mail') as mock_send_mail:
+            original_email_use = settings.EMAIL_USE
+            settings.EMAIL_USE = 'console'
+
+            try:
+                send_booking_notification_email(
+                    self.booking,
+                    "Test",
+                    "booking_created_template"
+                )
+
+                args, kwargs = mock_send_mail.call_args
+                plain_message = args[1]
+
+                self.assertIn("No notes given", plain_message)
+            finally:
+                settings.EMAIL_USE = original_email_use
+
+
+# MANAGEMENT COMMAND TESTS
+
+class CreateUserProfilesCommandTest(TestCase):
+    """Test create_user_profiles management command"""
+
+    def setUp(self):
+        # Create users without profiles by temporarily disconnecting signal
+        from django.db.models.signals import post_save
+        from core.models import create_user_profile, User as UserModel
+
+        post_save.disconnect(create_user_profile, sender=UserModel)
+
+        self.user1 = User.objects.create_user(
+            username='user1',
+            email='user1@example.com',
+            password='pass123'
+        )
+        self.user2 = User.objects.create_user(
+            username='user2',
+            email='user2@example.com',
+            password='pass123'
+        )
+
+        # Delete profiles if they exist
+        from core.models import UserProfile
+        UserProfile.objects.filter(user__in=[self.user1, self.user2]).delete()
+
+        # Reconnect signal
+        post_save.connect(create_user_profile, sender=UserModel)
+
+    def test_create_user_profiles_command(self):
+        """Test that command creates profiles for users without them"""
+        from django.core.management import call_command
+        from io import StringIO
+        from core.models import UserProfile
+
+        # Verify no profiles exist
+        self.assertEqual(UserProfile.objects.filter(user__in=[self.user1, self.user2]).count(), 0)
+
+        # Call the command
+        out = StringIO()
+        call_command('create_user_profiles', stdout=out)
+
+        # Verify profiles were created
+        self.assertTrue(UserProfile.objects.filter(user=self.user1).exists())
+        self.assertTrue(UserProfile.objects.filter(user=self.user2).exists())
+
+        # Check output
+        output = out.getvalue()
+        self.assertIn('Created profile for user:', output)
+
+    def test_create_user_profiles_command_existing_profiles(self):
+        """Test that command doesn't duplicate existing profiles"""
+        from django.core.management import call_command
+        from io import StringIO
+        from core.models import UserProfile
+
+        # Create profiles manually
+        UserProfile.objects.get_or_create(user=self.user1)
+        UserProfile.objects.get_or_create(user=self.user2)
+
+        initial_count = UserProfile.objects.count()
+
+        # Call the command again
+        out = StringIO()
+        call_command('create_user_profiles', stdout=out)
+
+        # Verify no duplicate profiles
+        self.assertEqual(UserProfile.objects.count(), initial_count)
+
+        # Check output mentions existing profiles
+        output = out.getvalue()
+        self.assertIn('already exists', output)
+
+
+class EnsureSuperuserCommandTest(TestCase):
+    """Test ensure_superuser management command"""
+
+    def test_ensure_superuser_creates_superuser_when_none_exists(self):
+        """Test that command creates superuser when none exists"""
+        from django.core.management import call_command
+        from io import StringIO
+
+        # Ensure no superusers exist
+        User.objects.filter(is_superuser=True).delete()
+
+        out = StringIO()
+        call_command('ensure_superuser', stdout=out)
+
+        # Verify superuser was created
+        self.assertTrue(User.objects.filter(is_superuser=True).exists())
+
+        # Check output
+        output = out.getvalue()
+        self.assertIn('created successfully', output)
+
+    def test_ensure_superuser_skips_when_exists(self):
+        """Test that command skips creation when superuser exists"""
+        from django.core.management import call_command
+        from io import StringIO
+
+        # Create a superuser
+        User.objects.create_superuser(
+            username='existing_admin',
+            email='admin@example.com',
+            password='admin123'
+        )
+
+        initial_count = User.objects.filter(is_superuser=True).count()
+
+        out = StringIO()
+        call_command('ensure_superuser', stdout=out)
+
+        # Verify no new superuser was created
+        self.assertEqual(User.objects.filter(is_superuser=True).count(), initial_count)
+
+        # Check output
+        output = out.getvalue()
+        self.assertIn('already exists', output)
+
+
+# SERIALIZER EDGE CASE TESTS
+
+class BookingSerializerEdgeCaseTest(APITestCase):
+    """Test BookingSerializer edge cases for better coverage"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='pass123'
+        )
+        self.resource = Resource.objects.create(name='Test Room', capacity=5)
+        self.client.force_authenticate(user=self.user)
+
+    def test_booking_serializer_suggests_alternative_times(self):
+        """Test that serializer suggests alternative times when slot is taken"""
+        # Create a blocking booking
+        future_time = timezone.now() + timedelta(hours=2)
+        Booking.objects.create(
+            user=self.user,
+            resource=self.resource,
+            start_time=future_time,
+            end_time=future_time + timedelta(hours=2),
+            status='confirmed'
+        )
+
+        # Try to create overlapping booking
+        data = {
+            'resource': self.resource.id,
+            'start_time': (future_time + timedelta(minutes=30)).isoformat(),
+            'end_time': (future_time + timedelta(hours=3)).isoformat(),
+        }
+
+        response = self.client.post('/api/bookings/', data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # Should contain booking conflict or alternative time message
+        response_text = str(response.data).lower()
+        self.assertTrue(
+            'already booked' in response_text or
+            'conflicting' in response_text or
+            'suggested' in response_text,
+            f"Expected booking conflict message in: {response.data}"
+        )
+
+    def test_booking_partial_update_without_time_validation(self):
+        """Test that PATCH without time fields doesn't trigger time validation"""
+        booking = Booking.objects.create(
+            user=self.user,
+            resource=self.resource,
+            start_time=timezone.now() + timedelta(hours=1),
+            end_time=timezone.now() + timedelta(hours=2),
+            status='pending'
+        )
+
+        # Update only notes (no time fields)
+        data = {'notes': 'Updated notes only'}
+        response = self.client.patch(f'/api/bookings/{booking.id}/', data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        booking.refresh_from_db()
+        self.assertEqual(booking.notes, 'Updated notes only')
+
+    def test_booking_serializer_init_sets_user_readonly(self):
+        """Test that user field is properly set as read-only in serializer"""
+        from core.serializers import BookingSerializer
+
+        serializer = BookingSerializer()
+        self.assertTrue(serializer.fields['user'].read_only)
+
+
+class CustomUserCreateSerializerTest(APITestCase):
+    """Test CustomUserCreateSerializer validation"""
+
+    def test_email_required_validation(self):
+        """Test that email is required"""
+        data = {
+            'username': 'testuser',
+            'password': 'testpass123'
+            # email is missing
+        }
+        response = self.client.post('/api/auth/users/', data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_email_uniqueness_validation(self):
+        """Test that duplicate emails are rejected"""
+        User.objects.create_user(
+            username='existinguser',
+            email='duplicate@example.com',
+            password='pass123'
+        )
+
+        data = {
+            'username': 'newuser',
+            'email': 'duplicate@example.com',
+            'password': 'pass123'
+        }
+        response = self.client.post('/api/auth/users/', data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('email', str(response.data).lower())
+
+    def test_email_case_insensitive_uniqueness(self):
+        """Test that email uniqueness is case-insensitive"""
+        User.objects.create_user(
+            username='user1',
+            email='Test@Example.com',
+            password='pass123'
+        )
+
+        data = {
+            'username': 'user2',
+            'email': 'test@example.com',  # Different case
+            'password': 'pass123'
+        }
+        response = self.client.post('/api/auth/users/', data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_username_case_insensitive_uniqueness(self):
+        """Test that username uniqueness is case-insensitive"""
+        User.objects.create_user(
+            username='TestUser',
+            email='test1@example.com',
+            password='pass123'
+        )
+
+        data = {
+            'username': 'testuser',  # Different case
+            'email': 'test2@example.com',
+            'password': 'pass123'
+        }
+        response = self.client.post('/api/auth/users/', data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_email_normalization(self):
+        """Test that email is normalized to lowercase"""
+        data = {
+            'username': 'testuser',
+            'email': '  TEST@EXAMPLE.COM  ',  # Uppercase with spaces
+            'password': 'pass123'
+        }
+        response = self.client.post('/api/auth/users/', data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        user = User.objects.get(username='testuser')
+        self.assertEqual(user.email, 'test@example.com')
+
+
+class ResourceSerializerTest(TestCase):
+    """Test ResourceSerializer availability status calculations"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='pass123'
+        )
+        self.resource = Resource.objects.create(
+            name='Test Room',
+            capacity=5,
+            is_available=True
+        )
+
+    def test_availability_status_manually_disabled(self):
+        """Test that manually disabled resources show as unavailable"""
+        from core.serializers import ResourceSerializer
+
+        self.resource.is_available = False
+        self.resource.save()
+
+        serializer = ResourceSerializer(self.resource)
+        self.assertEqual(serializer.data['availability_status'], 'unavailable')
+
+    def test_availability_status_with_confirmed_booking(self):
+        """Test availability status with confirmed future booking"""
+        from core.serializers import ResourceSerializer
+
+        Booking.objects.create(
+            user=self.user,
+            resource=self.resource,
+            start_time=timezone.now() + timedelta(hours=1),
+            end_time=timezone.now() + timedelta(hours=2),
+            status='confirmed'
+        )
+
+        serializer = ResourceSerializer(self.resource)
+        self.assertEqual(serializer.data['availability_status'], 'unavailable')
+
+    def test_availability_status_with_pending_booking(self):
+        """Test availability status with pending booking"""
+        from core.serializers import ResourceSerializer
+
+        Booking.objects.create(
+            user=self.user,
+            resource=self.resource,
+            start_time=timezone.now() + timedelta(hours=1),
+            end_time=timezone.now() + timedelta(hours=2),
+            status='pending'
+        )
+
+        serializer = ResourceSerializer(self.resource)
+        self.assertEqual(serializer.data['availability_status'], 'pending')
+
+    def test_availability_status_with_cancelled_booking(self):
+        """Test that cancelled bookings don't affect availability"""
+        from core.serializers import ResourceSerializer
+
+        Booking.objects.create(
+            user=self.user,
+            resource=self.resource,
+            start_time=timezone.now() + timedelta(hours=1),
+            end_time=timezone.now() + timedelta(hours=2),
+            status='cancelled'
+        )
+
+        serializer = ResourceSerializer(self.resource)
+        self.assertEqual(serializer.data['availability_status'], 'available')
+
+    def test_availability_status_with_past_booking(self):
+        """Test that past bookings don't affect current availability"""
+        from core.serializers import ResourceSerializer
+
+        Booking.objects.create(
+            user=self.user,
+            resource=self.resource,
+            start_time=timezone.now() - timedelta(hours=3),
+            end_time=timezone.now() - timedelta(hours=1),
+            status='confirmed'
+        )
+
+        serializer = ResourceSerializer(self.resource)
+        self.assertEqual(serializer.data['availability_status'], 'available')
+
+

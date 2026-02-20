@@ -1,0 +1,26 @@
+[run]
+source = .
+omit =
+    */migrations/*
+    */tests.py
+    */test_*.py
+    */__pycache__/*
+    */venv/*
+    */virtualenv/*
+    manage.py
+    */wsgi.py
+    */asgi.py
+    */__init__.py
+    */settings.py
+    */management/commands/*
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+
+[html]
+directory = htmlcov
+
+[xml]
+output = coverage.xml

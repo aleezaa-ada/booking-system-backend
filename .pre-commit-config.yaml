@@ -1,9 +1,9 @@
 repos:
   - repo: local
     hooks:
-      - id: run-tests
-        name: Run Django Tests
-        entry: python manage.py test
+      - id: run-pytest
+        name: Run Tests with Coverage (pytest)
+        entry: bash -c 'pytest --cov=core --cov=booking_system_api --cov-fail-under=80 --cov-report=term-missing -q'
         language: system
         pass_filenames: false
         always_run: true

@@ -23,6 +23,11 @@ wheels/
 .installed.cfg
 *.egg
 
+# Testing
+htmlcov
+.coverage
+coverage.xml
+
 # Django
 *.sqlite3
 *.log
@@ -49,3 +54,4 @@ Pipfile.lock
 # OS
 .DS_Store
 Thumbs.db
+
