@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Resource, Booking, UserProfile
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from datetime import timedelta
 
 User = get_user_model()
 
@@ -69,7 +70,7 @@ class BookingSerializer(serializers.ModelSerializer):
             # When updating existing bookings, skip this validation
             if not self.instance:
                 # Booking Cut-off Time (cannot book within 30 minutes of now)
-                min_booking_lead_time = timezone.now() + timezone.timedelta(minutes=30)
+                min_booking_lead_time = timezone.now() + timedelta(minutes=30)
                 if data['start_time'] < min_booking_lead_time:
                     raise serializers.ValidationError(f"Bookings must be made at least 30 minutes in advance. Earliest available: {min_booking_lead_time.strftime('%Y-%m-%d %H:%M')}")
 
@@ -110,34 +111,39 @@ class BookingSerializer(serializers.ModelSerializer):
                         f"{booking.start_time.strftime('%Y-%m-%d %H:%M')} - {booking.end_time.strftime('%H:%M')}"
                     )
 
-                # Find next available time slot after the requested time
-                all_bookings_today = Booking.objects.filter(
+                # Walk forward through all future bookings for this resource until
+                # we find a gap that is large enough for the requested duration.
+                duration = end_time - start_time
+
+                all_future_bookings = Booking.objects.filter(
                     resource=resource,
-                    start_time__date=start_time.date(),
-                    start_time__gte=timezone.now()
-                ).exclude(status__in=['cancelled', 'rejected']).order_by('start_time')
+                    end_time__gt=timezone.now()
+                ).exclude(status__in=['cancelled', 'rejected']).order_by('end_time')
 
-                suggestions = []
-                if all_bookings_today.exists():
-                    # Suggest time after the last conflicting booking
-                    last_conflict = overlapping_bookings.order_by('-end_time').first()
-                    if last_conflict:
-                        suggested_start = last_conflict.end_time
-                        # Check if there's enough time before the next booking
-                        next_booking = all_bookings_today.filter(start_time__gt=suggested_start).first()
-                        duration = end_time - start_time
-                        suggested_end = suggested_start + duration
+                if self.instance:
+                    all_future_bookings = all_future_bookings.exclude(pk=self.instance.pk)
 
-                        if not next_booking or suggested_end <= next_booking.start_time:
-                            suggestions.append(
-                                f"{suggested_start.strftime('%Y-%m-%d %H:%M')} - {suggested_end.strftime('%H:%M')}"
-                            )
+                suggestion = None
+                candidate_start = overlapping_bookings.order_by('-end_time').first().end_time
+
+                for _ in range(20):  # cap iterations to avoid infinite loop
+                    candidate_end = candidate_start + duration
+                    clash = all_future_bookings.filter(
+                        start_time__lt=candidate_end,
+                        end_time__gt=candidate_start
+                    ).first()
+                    if clash is None:
+                        # No clash — this slot is free
+                        suggestion = f"{candidate_start.strftime('%Y-%m-%d %H:%M')} - {candidate_end.strftime('%H:%M')}"
+                        break
+                    # Move past the clashing booking and try again
+                    candidate_start = clash.end_time
 
                 error_msg = "Cannot create booking - this resource is already booked during your selected time. "
                 error_msg += f"Conflicting booking(s): {', '.join(conflict_details)}. "
 
-                if suggestions:
-                    error_msg += f"Suggested available time: {suggestions[0]}."
+                if suggestion:
+                    error_msg += f"Suggested available time: {suggestion}."
                 else:
                     error_msg += "Please check the resource availability and try a different time."
 
